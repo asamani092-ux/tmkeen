@@ -36,11 +36,9 @@
 | `SMTP_SECURE` | `true` |
 | `SMTP_USER` / `SMTP_PASS` | بيانات البريد |
 
-### 4. Release Command
+### 4. Migrations (تلقائي)
 
-```
-npx prisma migrate deploy
-```
+عند كل تشغيل للحاوية يُنفَّذ `npx prisma migrate deploy` تلقائياً عبر [`docker-entrypoint.sh`](../docker-entrypoint.sh) — **لا حاجة لـ Pre-deployment في Coolify**.
 
 (أول مرة فقط — seed يدوي عبر Terminal في Coolify: `npm run db:seed`)
 
