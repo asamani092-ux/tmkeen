@@ -73,10 +73,11 @@ export default function Navbar({
           <Image
             src="/logo.png"
             alt="شعار جمعية الزاد"
-            width={48}
-            height={56}
+            width={300}
+            height={179}
             className="h-14 w-auto object-contain"
             priority
+            unoptimized
           />
         </FullPageLink>
       </div>
