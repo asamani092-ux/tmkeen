@@ -2,9 +2,12 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import SubmitButton from "@/components/ui/SubmitButton";
+import FollowUpQuestionEditor, {
+  type FollowUpQuestionDraft,
+} from "@/components/admin/FollowUpQuestionEditor";
+import FollowUpFormPreview from "@/components/admin/FollowUpFormPreview";
 import { toastSuccess, toastError } from "@/lib/toast";
-import { Plus, Trash2, Eye } from "lucide-react";
+import { Pencil, Trash2, Eye, ChevronUp, ChevronDown } from "lucide-react";
 
 type Question = {
   id: string;
@@ -17,13 +20,6 @@ type Question = {
   helperText: string;
 };
 
-const FIELD_TYPES = [
-  { value: "text", label: "نص قصير" },
-  { value: "textarea", label: "نص طويل" },
-  { value: "yes_no", label: "نعم / لا" },
-  { value: "select", label: "قائمة منسدلة" },
-];
-
 export default function FollowUpFormBuilder() {
   const router = useRouter();
   const [month, setMonth] = useState(1);
@@ -31,13 +27,7 @@ export default function FollowUpFormBuilder() {
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const [preview, setPreview] = useState(false);
-  const [form, setForm] = useState({
-    label: "",
-    fieldType: "text",
-    options: "",
-    required: true,
-    helperText: "",
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function loadQuestions(m: number) {
     setLoading(true);
@@ -55,6 +45,7 @@ export default function FollowUpFormBuilder() {
   function onMonthChange(m: number) {
     setMonth(m);
     setPreview(false);
+    setEditingId(null);
     loadQuestions(m);
   }
 
@@ -63,23 +54,21 @@ export default function FollowUpFormBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.label.trim()) return;
+  function handleAdd(draft: FollowUpQuestionDraft) {
     startTransition(async () => {
       const res = await fetch("/api/follow-up-form/questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           month,
-          label: form.label,
-          fieldType: form.fieldType,
-          options: form.options
+          label: draft.label,
+          fieldType: draft.fieldType,
+          options: draft.options
             .split(",")
             .map((s) => s.trim())
             .filter(Boolean),
-          required: form.required,
-          helperText: form.helperText,
+          required: draft.required,
+          helperText: draft.helperText,
         }),
       });
       const data = await res.json();
@@ -88,7 +77,34 @@ export default function FollowUpFormBuilder() {
         return;
       }
       toastSuccess("تمت إضافة السؤال");
-      setForm({ label: "", fieldType: "text", options: "", required: true, helperText: "" });
+      await loadQuestions(month);
+      router.refresh();
+    });
+  }
+
+  function handleUpdate(id: string, draft: FollowUpQuestionDraft) {
+    startTransition(async () => {
+      const res = await fetch(`/api/follow-up-form/questions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: draft.label,
+          fieldType: draft.fieldType,
+          options: draft.options
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          required: draft.required,
+          helperText: draft.helperText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError(data.error || "فشل التحديث");
+        return;
+      }
+      toastSuccess("تم تحديث السؤال");
+      setEditingId(null);
       await loadQuestions(month);
       router.refresh();
     });
@@ -102,11 +118,45 @@ export default function FollowUpFormBuilder() {
         return;
       }
       toastSuccess("تم الحذف");
+      if (editingId === id) setEditingId(null);
       await loadQuestions(month);
     });
   }
 
-  const monthQuestions = questions.filter((q) => q.month === month);
+  function moveQuestion(id: string, direction: "up" | "down") {
+    const sorted = [...monthQuestions].sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = sorted.findIndex((q) => q.id === id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return;
+
+    startTransition(async () => {
+      const a = sorted[idx];
+      const b = sorted[swapIdx];
+      const resA = await fetch(`/api/follow-up-form/questions/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sortOrder: b.sortOrder }),
+      });
+      const resB = await fetch(`/api/follow-up-form/questions/${b.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sortOrder: a.sortOrder }),
+      });
+      if (!resA.ok || !resB.ok) {
+        toastError("فشل إعادة الترتيب");
+        return;
+      }
+      await loadQuestions(month);
+    });
+  }
+
+  const monthQuestions = questions
+    .filter((q) => q.month === month)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const editingQuestion = editingId
+    ? monthQuestions.find((q) => q.id === editingId)
+    : null;
 
   return (
     <div className="card space-y-4">
@@ -139,43 +189,14 @@ export default function FollowUpFormBuilder() {
       </div>
 
       {preview ? (
-        <div className="card-section space-y-3">
-          <p className="font-semibold text-primary">معاينة — شهر {month}</p>
-          {monthQuestions.length === 0 ? (
-            <p className="text-sm text-brand-gray">لا أسئلة بعد</p>
-          ) : (
-            monthQuestions.map((q) => (
-              <div key={q.id}>
-                <label className="label-field">{q.label}{q.required ? " *" : ""}</label>
-                {q.helperText && <p className="mb-1 text-xs text-brand-gray">{q.helperText}</p>}
-                {q.fieldType === "textarea" ? (
-                  <textarea className="input-field resize-none" rows={2} disabled />
-                ) : q.fieldType === "yes_no" ? (
-                  <div className="flex gap-4 text-sm">
-                    <span>نعم</span>
-                    <span>لا</span>
-                  </div>
-                ) : q.fieldType === "select" ? (
-                  <select className="input-field" disabled>
-                    <option>اختر...</option>
-                    {q.options.map((o) => (
-                      <option key={o}>{o}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input className="input-field" disabled />
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        <FollowUpFormPreview month={month} questions={monthQuestions} />
       ) : (
         <>
           {loading ? (
             <p className="text-sm text-brand-gray">جاري التحميل...</p>
           ) : (
             <ul className="space-y-2">
-              {monthQuestions.map((q) => (
+              {monthQuestions.map((q, i) => (
                 <li
                   key={q.id}
                   className="flex items-start justify-between gap-2 rounded-lg border border-surface-border p-3 text-sm"
@@ -183,72 +204,76 @@ export default function FollowUpFormBuilder() {
                   <div className="min-w-0 flex-1 text-start">
                     <p className="font-semibold text-primary">{q.label}</p>
                     <p className="text-xs text-brand-gray">
-                      {FIELD_TYPES.find((f) => f.value === q.fieldType)?.label}
+                      {q.fieldType}
                       {q.required ? " · مطلوب" : ""}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(q.id)}
-                    disabled={pending}
-                    className="shrink-0 text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveQuestion(q.id, "up")}
+                      disabled={pending || i === 0}
+                      className="rounded p-1 text-brand-gray hover:bg-surface-muted disabled:opacity-40"
+                      title="أعلى"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveQuestion(q.id, "down")}
+                      disabled={pending || i === monthQuestions.length - 1}
+                      className="rounded p-1 text-brand-gray hover:bg-surface-muted disabled:opacity-40"
+                      title="أسفل"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(q.id)}
+                      disabled={pending}
+                      className="rounded p-1 text-primary hover:bg-surface-muted"
+                      title="تعديل"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(q.id)}
+                      disabled={pending}
+                      className="rounded p-1 text-red-600 hover:bg-red-50"
+                      title="حذف"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
 
-          <form onSubmit={handleAdd} className="card-section space-y-3">
-            <p className="flex items-center gap-2 font-semibold text-primary">
-              <Plus className="h-4 w-4" />
-              إضافة سؤال — شهر {month}
-            </p>
-            <input
-              className="input-field"
-              placeholder="نص السؤال"
-              value={form.label}
-              onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-              required
+          {editingQuestion ? (
+            <FollowUpQuestionEditor
+              month={month}
+              initial={{
+                label: editingQuestion.label,
+                fieldType: editingQuestion.fieldType,
+                options: editingQuestion.options.join(", "),
+                required: editingQuestion.required,
+                helperText: editingQuestion.helperText,
+              }}
+              loading={pending}
+              submitLabel="حفظ التعديل"
+              onSubmit={(draft) => handleUpdate(editingQuestion.id, draft)}
+              onCancel={() => setEditingId(null)}
             />
-            <select
-              className="input-field"
-              value={form.fieldType}
-              onChange={(e) => setForm((f) => ({ ...f, fieldType: e.target.value }))}
-            >
-              {FIELD_TYPES.map((ft) => (
-                <option key={ft.value} value={ft.value}>
-                  {ft.label}
-                </option>
-              ))}
-            </select>
-            {form.fieldType === "select" && (
-              <input
-                className="input-field"
-                placeholder="خيارات مفصولة بفاصلة"
-                value={form.options}
-                onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
-              />
-            )}
-            <input
-              className="input-field"
-              placeholder="نص توضيحي (اختياري)"
-              value={form.helperText}
-              onChange={(e) => setForm((f) => ({ ...f, helperText: e.target.value }))}
+          ) : (
+            <FollowUpQuestionEditor
+              month={month}
+              loading={pending}
+              submitLabel="إضافة السؤال"
+              onSubmit={handleAdd}
             />
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={form.required}
-                onChange={(e) => setForm((f) => ({ ...f, required: e.target.checked }))}
-              />
-              مطلوب
-            </label>
-            <SubmitButton loading={pending} className="btn-primary w-full !py-2 text-sm">
-              إضافة السؤال
-            </SubmitButton>
-          </form>
+          )}
         </>
       )}
     </div>

@@ -37,6 +37,20 @@
 | `SMTP_PORT` | `465` |
 | `SMTP_SECURE` | `true` |
 | `SMTP_USER` / `SMTP_PASS` | بيانات البريد |
+| `CRON_SECRET` | سر لـ `/api/cron/follow-up-reminders` (مثلاً `openssl rand -hex 32`) |
+
+### 3.1 تذكير متابعة ما بعد التوظيف (Cron)
+
+جدّول طلب HTTP يومي:
+
+```http
+GET https://YOUR_DOMAIN/api/cron/follow-up-reminders
+Authorization: Bearer YOUR_CRON_SECRET
+```
+
+في Coolify: **Scheduled Tasks** → cron `0 8 * * *` (08:00 UTC يومياً).
+
+> يُشغَّل أيضاً عند تحميل لوحة المدير/المستفيد كـ fallback.
 
 ### 4. Migrations (تلقائي)
 

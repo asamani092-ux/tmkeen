@@ -273,3 +273,71 @@ export async function getFollowUpFormForBeneficiary(beneficiaryId: string) {
 
   return { user, activeMonth, questions, records: user.followUps };
 }
+
+/** Backfill 6-month records for beneficiaries already in FOLLOW_UP without a program — O(6n) */
+export async function backfillFollowUpProgram(): Promise<{ updated: number }> {
+  const users = await prisma.user.findMany({
+    where: {
+      role: "BENEFICIARY",
+      stage: "FOLLOW_UP",
+      OR: [{ followUpProgramStatus: null }, { followUpProgramStartedAt: null }],
+    },
+    select: { id: true, stageEnteredAt: true },
+  });
+
+  for (const u of users) {
+    const startedAt = u.stageEnteredAt;
+    await prisma.user.update({
+      where: { id: u.id },
+      data: {
+        followUpProgramStatus: "ACTIVE",
+        followUpProgramStartedAt: startedAt,
+      },
+    });
+    for (let month = 1; month <= 6; month++) {
+      const { opensAt, dueAt } = computeMonthWindow(startedAt, month);
+      await prisma.followUp.upsert({
+        where: { beneficiaryId_month: { beneficiaryId: u.id, month } },
+        create: {
+          beneficiaryId: u.id,
+          month,
+          status: "PENDING",
+          opensAt,
+          dueAt,
+        },
+        update: { opensAt, dueAt },
+      });
+    }
+  }
+
+  return { updated: users.length };
+}
+
+export async function getFollowUpSubmission(beneficiaryId: string, month: number) {
+  const session = await getSession();
+  if (!session || session.role !== "ADMIN") {
+    return null;
+  }
+
+  const record = await prisma.followUp.findUnique({
+    where: { beneficiaryId_month: { beneficiaryId, month } },
+    include: {
+      beneficiary: { select: { id: true, name: true, phone: true } },
+    },
+  });
+  if (!record) return null;
+
+  const questions = await prisma.followUpFormQuestion.findMany({
+    where: { month },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  const answers = (record.answers ?? {}) as Record<string, string>;
+  const items = questions.map((q) => ({
+    questionId: q.id,
+    label: q.label,
+    answer: answers[q.id] ?? "—",
+  }));
+
+  return { record, items };
+}

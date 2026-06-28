@@ -137,6 +137,24 @@ export default function FollowUpMonthForm({ activeMonth, questions, records }: P
                     </option>
                   ))}
                 </select>
+              ) : q.fieldType === "radio" ? (
+                <div className="flex flex-wrap gap-4">
+                  {q.options.map((o) => (
+                    <label key={o} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name={`q-${q.id}`}
+                        value={o}
+                        required={q.required}
+                        checked={answers[q.id] === o}
+                        onChange={() =>
+                          setAnswers((a) => ({ ...a, [q.id]: o }))
+                        }
+                      />
+                      {o}
+                    </label>
+                  ))}
+                </div>
               ) : (
                 <input
                   className="input-field"

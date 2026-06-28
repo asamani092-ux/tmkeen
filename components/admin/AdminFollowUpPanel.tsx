@@ -7,7 +7,7 @@ import SubmitButton from "@/components/ui/SubmitButton";
 import { useSyncFromProps } from "@/lib/use-sync-from-props";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { FOLLOW_UP_STATUS_LABELS } from "@/lib/labels";
-import { Eye, Plus, Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 
 type FollowUp = {
   id: string;
@@ -113,11 +113,16 @@ export default function AdminFollowUpPanel({
   }
 
   function programAction(beneficiaryId: string, action: "complete" | "withdraw") {
+    let reason: string | undefined;
+    if (action === "withdraw") {
+      reason = window.prompt("سبب السحب من المتابعة (اختياري):") ?? undefined;
+      if (reason === null) return;
+    }
     startTransition(async () => {
       const res = await fetch("/api/follow-up-program", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ beneficiaryId, action }),
+        body: JSON.stringify({ beneficiaryId, action, reason }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -130,27 +135,27 @@ export default function AdminFollowUpPanel({
     });
   }
 
-  async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSaveNote(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!selected) return;
-    const form = new FormData(e.currentTarget);
+    const notes = new FormData(e.currentTarget).get("notes") as string;
+    const latest = [...selected.records].sort((a, b) => b.month - a.month)[0];
+    if (!latest) {
+      toastError("لا يوجد سجل متابعة — يبدأ البرنامج تلقائياً عند دخول مرحلة FOLLOW_UP");
+      return;
+    }
     startTransition(async () => {
       const res = await fetch("/api/follow-ups", {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          beneficiaryId: selected.id,
-          month: Number(form.get("month")),
-          status: form.get("status"),
-          notes: form.get("notes"),
-        }),
+        body: JSON.stringify({ id: latest.id, notes }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError(data.error || "فشل الإضافة");
+        toastError(data.error || "فشل الحفظ");
         return;
       }
-      toastSuccess("تم إضافة سجل المتابعة");
+      toastSuccess("تم حفظ الملاحظة");
       router.refresh();
     });
   }
@@ -289,26 +294,11 @@ export default function AdminFollowUpPanel({
               ))}
           </ul>
 
-          <form onSubmit={handleAdd} className="space-y-3 border-t border-surface-border pt-4">
-            <h3 className="flex items-center gap-2 font-bold text-primary">
-              <Plus className="h-4 w-4" />
-              إضافة سجل يدوي
-            </h3>
-            <select name="month" required className="input-field">
-              {[1, 2, 3, 4, 5, 6].map((m) => (
-                <option key={m} value={m}>
-                  شهر {m}
-                </option>
-              ))}
-            </select>
-            <select name="status" defaultValue="PENDING" className="input-field">
-              <option value="PENDING">قيد الانتظار</option>
-              <option value="COMPLETED">مكتمل</option>
-              <option value="MISSED">فائت</option>
-            </select>
-            <textarea name="notes" rows={2} className="input-field resize-none" placeholder="ملاحظات" />
+          <form onSubmit={handleSaveNote} className="space-y-3 border-t border-surface-border pt-4">
+            <h3 className="font-bold text-primary">ملاحظة إدارية</h3>
+            <textarea name="notes" rows={2} className="input-field resize-none" placeholder="ملاحظات على المستفيد..." required />
             <SubmitButton loading={pending} className="btn-primary w-full !py-2 text-sm">
-              إضافة
+              حفظ الملاحظة
             </SubmitButton>
           </form>
         </FloatingModal>
