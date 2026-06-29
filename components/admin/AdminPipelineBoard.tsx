@@ -122,12 +122,9 @@ export default function AdminPipelineBoard({ beneficiaries }: Props) {
                   className="cursor-pointer rounded-lg border border-surface-border bg-surface p-4 text-start text-sm transition hover:border-primary"
                   onClick={() => setQuickView(b)}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-primary">{b.name}</p>
-                      <p className="text-brand-gray" dir="ltr">{b.phone}</p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="min-w-0 flex-1 font-bold text-primary">{b.name}</p>
+                    <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {b.stage === "PENDING_APPROVAL" && (
                         <button
                           type="button"
@@ -152,6 +149,7 @@ export default function AdminPipelineBoard({ beneficiaries }: Props) {
                       )}
                     </div>
                   </div>
+                  <p className="mt-1 text-brand-gray" dir="ltr">{b.phone}</p>
                   {b.guideName && (
                     <p className="mt-2 text-brand-gray">المرشد: {b.guideName}</p>
                   )}
