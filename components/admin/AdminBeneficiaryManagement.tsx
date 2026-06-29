@@ -98,6 +98,13 @@ export default function AdminBeneficiaryManagement({
   }
 
   function approve(beneficiaryId: string, action: "registration" | "transition") {
+    if (action === "registration") {
+      const beneficiary = rows.find((b) => b.id === beneficiaryId);
+      if (!beneficiary?.guideId) {
+        toastError("يجب إسناد مرشد قبل اعتماد التسجيل");
+        return;
+      }
+    }
     startTransition(async () => {
       const res = await fetch("/api/stage-approve", {
         method: "POST",
@@ -210,9 +217,10 @@ export default function AdminBeneficiaryManagement({
           {b.stage === "PENDING_APPROVAL" && (
             <button
               type="button"
-              disabled={pending}
+              disabled={pending || !b.guideId}
               onClick={() => approve(b.id, "registration")}
-              className="btn-primary !px-3 !py-1.5 text-xs"
+              className="btn-primary !px-3 !py-1.5 text-xs disabled:opacity-50"
+              title={!b.guideId ? "يجب إسناد مرشد أولاً" : undefined}
             >
               <CheckCircle className="inline h-3 w-3" />
               اعتماد التسجيل
@@ -469,6 +477,47 @@ export default function AdminBeneficiaryManagement({
                 <p className="whitespace-pre-wrap text-sm text-brand-gray">
                   {selected.professionalRecommendations}
                 </p>
+              </div>
+            )}
+
+            {selected.stage === "PENDING_APPROVAL" && (
+              <div className="card-section space-y-3 border-2 border-amber-200 bg-amber-50/40">
+                <h4 className="font-bold text-primary">اعتماد التسجيل</h4>
+                <p className="text-sm text-brand-gray">
+                  1. اختر المرشد المناسب للمستفيد
+                  <br />
+                  2. اضغط «اعتماد التسجيل» لإكمال العملية ونقله إلى مرحلة الإرشاد
+                </p>
+                <div>
+                  <label className="label-field">إسناد المرشد</label>
+                  <select
+                    value={selected.guideId ?? ""}
+                    disabled={pending}
+                    className="input-field"
+                    onChange={(e) => assign(selected.id, e.target.value)}
+                  >
+                    <option value="">— اختر مرشداً —</option>
+                    {guides.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {!selected.guideId && (
+                  <p className="text-xs font-semibold text-amber-900">
+                    يجب إسناد مرشد قبل اعتماد التسجيل
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={pending || !selected.guideId}
+                  onClick={() => approve(selected.id, "registration")}
+                  className="btn-primary !px-4 !py-2 text-sm disabled:opacity-50"
+                >
+                  <CheckCircle className="inline h-4 w-4" />
+                  اعتماد التسجيل
+                </button>
               </div>
             )}
           </div>

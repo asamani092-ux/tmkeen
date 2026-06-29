@@ -1032,6 +1032,9 @@ export async function approveRegistration(
   if (!beneficiary) {
     return { success: false, error: "المستفيد غير موجود أو ليس بانتظار الاعتماد" };
   }
+  if (!beneficiary.guideId) {
+    return { success: false, error: "يجب إسناد مرشد قبل اعتماد التسجيل" };
+  }
 
   await prisma.user.update({
     where: { id: beneficiaryId },
